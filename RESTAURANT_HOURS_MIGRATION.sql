@@ -9,4 +9,4 @@ set timezone = case when market_code like 'gh-%' then 'Africa/Accra' else 'Asia/
 where timezone is null;
 
 comment on column public.restaurants.weekly_hours is
-  'JSON object keyed 0-6 (Sunday-Saturday), each containing closed, open, and close.';
+  'JSON object keyed 0-6 (Sunday-Saturday), each containing closed, open, close, break_enabled, break_start, and break_end.';

@@ -6,7 +6,7 @@ import { getMarket, isWithinMarketArea } from '@/lib/markets';
 import { calculateDeliveryQuote, DEFAULT_DELIVERY_SETTINGS, normalizeDeliverySettings } from '@/lib/delivery';
 import { geocodeDeliveryArea } from '@/lib/geocode';
 import { geoapifyDrivingRoute } from '@/lib/geoapify';
-import { marketTimezone, normalizeWeeklyHours, restaurantAvailability } from '@/lib/restaurantHours';
+import { marketTimezone, normalizeWeeklyHours, restaurantAvailability, validateWeeklyHours } from '@/lib/restaurantHours';
 import { assertServerMarket, serverDefaultMarket, serverDeploymentCountry, serverMarketCodes } from '@/lib/deploymentServer';
 
 const ORDER_STATUSES = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
@@ -454,7 +454,11 @@ export async function saveRestaurant(record={}) {
   }
   cleaned.market_code=assertServerMarket(cleaned.market_code||serverDefaultMarket());
   cleaned.timezone=cleaned.timezone||marketTimezone(cleaned.market_code);
-  if(cleaned.weekly_hours) cleaned.weekly_hours=normalizeWeeklyHours(cleaned.weekly_hours);
+  if(cleaned.weekly_hours){
+    const hoursError=validateWeeklyHours(cleaned.weekly_hours);
+    if(hoursError) throw new Error(hoursError);
+    cleaned.weekly_hours=normalizeWeeklyHours(cleaned.weekly_hours);
+  }
   const result=await supabaseAdmin.from('restaurants').upsert(cleanRecord({...cleaned,restaurant_id:cleaned.restaurant_id||newId('r')}),{onConflict:'restaurant_id'}).select().single();
   if(result.error&&['PGRST204','42703'].includes(result.error.code)) throw new Error('Restaurant hours are not installed yet. Run RESTAURANT_HOURS_MIGRATION.sql in Supabase, then try again.');
   if(result.error) throw databaseError(result.error,'save restaurants');

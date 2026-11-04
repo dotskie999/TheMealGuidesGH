@@ -6,7 +6,7 @@ const DAYS=[
 ];
 
 export const RESTAURANT_DAYS=DAYS;
-export const DEFAULT_WEEKLY_HOURS=Object.fromEntries(DAYS.map(day=>[day.key,{closed:false,open:'09:00',close:'22:00'}]));
+export const DEFAULT_WEEKLY_HOURS=Object.fromEntries(DAYS.map(day=>[day.key,{closed:false,open:'09:00',close:'22:00',break_enabled:false,break_start:'12:00',break_end:'13:00'}]));
 export const marketTimezone=(marketCode)=>String(marketCode||'').startsWith('gh-')?'Africa/Accra':'Asia/Manila';
 
 const validTime=(value)=>/^([01]\d|2[0-3]):[0-5]\d$/.test(String(value||''));
@@ -17,8 +17,37 @@ export function normalizeWeeklyHours(value){
   const source=value&&typeof value==='object'&&!Array.isArray(value)?value:{};
   return Object.fromEntries(DAYS.map(day=>{
     const row=source[day.key]||{};
-    return [day.key,{closed:row.closed===true||row.closed==='true',open:validTime(row.open)?row.open:'09:00',close:validTime(row.close)?row.close:'22:00'}];
+    return [day.key,{
+      closed:row.closed===true||row.closed==='true',
+      open:validTime(row.open)?row.open:'09:00',
+      close:validTime(row.close)?row.close:'22:00',
+      break_enabled:row.break_enabled===true||row.break_enabled==='true',
+      break_start:validTime(row.break_start)?row.break_start:'12:00',
+      break_end:validTime(row.break_end)?row.break_end:'13:00',
+    }];
   }));
+}
+
+function shiftBounds(row,base=0){
+  const openMinute=minutes(row.open); const closeMinute=minutes(row.close);
+  return {start:base+openMinute,end:base+closeMinute+(closeMinute<=openMinute?1440:0)};
+}
+
+function breakBounds(row,base=0){
+  if(row.closed||!row.break_enabled) return null;
+  const shift=shiftBounds(row,base);
+  let start=base+minutes(row.break_start); while(start<=shift.start) start+=1440;
+  let end=base+minutes(row.break_end); while(end<=start) end+=1440;
+  return start<shift.end&&end<shift.end?{start,end}:null;
+}
+
+export function validateWeeklyHours(value){
+  const schedule=normalizeWeeklyHours(value);
+  for(const day of DAYS){
+    const row=schedule[day.key];
+    if(!row.closed&&row.break_enabled&&!breakBounds(row)) return `${day.label} break must start after opening and finish before closing.`;
+  }
+  return '';
 }
 
 function localParts(date,timeZone){
@@ -32,22 +61,33 @@ export function restaurantAvailability(restaurant,date=new Date()){
   if(!restaurant?.weekly_hours) return {isOpen:true,configured:false,label:'Open now',detail:'Operating hours are not configured yet.'};
   const timeZone=restaurant.timezone||marketTimezone(restaurant.market_code);
   const schedule=normalizeWeeklyHours(restaurant.weekly_hours);
-  const local=localParts(date,timeZone); const today=schedule[String(local.day)]; const previous=schedule[String((local.day+6)%7)];
-  let isOpen=false; let remaining=null; let closingTime=today.close;
-  if(!today.closed){
-    const start=minutes(today.open); const end=minutes(today.close);
-    if(start===end){isOpen=true;remaining=1440;}
-    else if(start<end&&local.minute>=start&&local.minute<end){isOpen=true;remaining=end-local.minute;}
-    else if(start>end&&local.minute>=start){isOpen=true;remaining=1440-local.minute+end;}
-  }
-  if(!isOpen&&!previous.closed&&minutes(previous.open)>minutes(previous.close)&&local.minute<minutes(previous.close)){isOpen=true;remaining=minutes(previous.close)-local.minute;closingTime=previous.close;}
-  if(isOpen) return {isOpen:true,configured:true,label:remaining<=60?`Closing soon · ${remaining} min`:'Open now',detail:`Closes at ${clock(closingTime)}`,timeZone};
-  for(let offset=0;offset<8;offset+=1){
-    const dayIndex=(local.day+offset)%7; const row=schedule[String(dayIndex)];
+  const local=localParts(date,timeZone); const segments=[]; const breaks=[];
+  for(let offset=-1;offset<8;offset+=1){
+    const dayIndex=(local.day+offset+7)%7; const row=schedule[String(dayIndex)];
     if(row.closed) continue;
-    const start=minutes(row.open);
-    if(offset===0&&start<=local.minute) continue;
-    return {isOpen:false,configured:true,label:'Closed',detail:`Opens ${offset===0?'today':offset===1?'tomorrow':DAYS[dayIndex].label} at ${clock(row.open)}`,timeZone};
+    const base=offset*1440; const shift=shiftBounds(row,base); const pause=breakBounds(row,base);
+    if(pause){
+      segments.push({start:shift.start,end:pause.start,startTime:row.open,endTime:row.break_start,endReason:'break',reopenTime:row.break_end});
+      segments.push({start:pause.end,end:shift.end,startTime:row.break_end,endTime:row.close,endReason:'close'});
+      breaks.push({start:pause.start,end:pause.end,reopenTime:row.break_end});
+    }else segments.push({start:shift.start,end:shift.end,startTime:row.open,endTime:row.close,endReason:'close'});
+  }
+  segments.sort((a,b)=>a.start-b.start); breaks.sort((a,b)=>a.start-b.start);
+  const current=segments.find(segment=>segment.start<=local.minute&&local.minute<segment.end);
+  if(current){
+    const remaining=current.end-local.minute;
+    if(current.endReason==='break') return {isOpen:true,configured:true,label:remaining<=60?`Break starts soon · ${remaining} min`:'Open now',detail:`Break at ${clock(current.endTime)} · Reopens at ${clock(current.reopenTime)}`,timeZone};
+    return {isOpen:true,configured:true,label:remaining<=60?`Closing soon · ${remaining} min`:'Open now',detail:`Closes at ${clock(current.endTime)}`,timeZone};
+  }
+  const currentBreak=breaks.find(pause=>pause.start<=local.minute&&local.minute<pause.end);
+  if(currentBreak){
+    const offset=Math.floor(currentBreak.end/1440); const dayIndex=(local.day+offset+7)%7;
+    return {isOpen:false,onBreak:true,configured:true,label:'On break',detail:`Reopens ${offset===0?'today':offset===1?'tomorrow':DAYS[dayIndex].label} at ${clock(currentBreak.reopenTime)}`,timeZone};
+  }
+  const next=segments.find(segment=>segment.start>local.minute);
+  if(next){
+    const offset=Math.floor(next.start/1440); const dayIndex=(local.day+offset+7)%7;
+    return {isOpen:false,configured:true,label:'Closed',detail:`Opens ${offset===0?'today':offset===1?'tomorrow':DAYS[dayIndex].label} at ${clock(next.startTime)}`,timeZone};
   }
   return {isOpen:false,configured:true,label:'Closed',detail:'No upcoming opening time is configured.',timeZone};
 }
