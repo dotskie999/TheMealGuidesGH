@@ -6,3 +6,5 @@ alter table public.restaurants
 
 create index if not exists restaurants_market_sort_idx
   on public.restaurants (market_code, sort_order, name);
+
+notify pgrst, 'reload schema';

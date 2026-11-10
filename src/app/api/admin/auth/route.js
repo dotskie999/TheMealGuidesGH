@@ -28,7 +28,7 @@ export async function POST(request) {
         attempts.set(key, { count: (entry?.until > now ? entry.count : 0) + 1, until: now + WINDOW_MS });
         return NextResponse.json({ error: 'Incorrect emergency PIN.' }, { status: 401 });
       }
-      session = { type:'emergency', role:'super_admin', displayName:'Emergency access', userId:null, emergency:true, countryScope:serverDeploymentCountry() };
+      session = { type:'emergency', role:'super_admin', displayName:'Emergency access', userId:null, emergency:true, countryScope:serverDeploymentCountry(), restaurantId:null };
     } else {
       const username=normalizeAdminUsername(body.username);
       const password=String(body.password||'');
@@ -39,11 +39,11 @@ export async function POST(request) {
         attempts.set(key,{count:(entry?.until>now?entry.count:0)+1,until:now+WINDOW_MS});
         return NextResponse.json({error:'Invalid username or password.'},{status:401});
       }
-      const {data:profile,error:profileError}=await supabaseAdmin.from('admin_profiles').select('user_id,username,display_name,role,active,must_change_password,country_scope').eq('user_id',authData.user.id).maybeSingle();
-      if(profileError?.code==='42703'||String(profileError?.message||'').includes('country_scope')) return NextResponse.json({error:'Ghana admin access is not installed yet. Run ADMIN_ACCOUNTS_MIGRATION.sql in Supabase.'},{status:503});
+      const {data:profile,error:profileError}=await supabaseAdmin.from('admin_profiles').select('user_id,username,display_name,role,active,must_change_password,country_scope,restaurant_id').eq('user_id',authData.user.id).maybeSingle();
+      if(profileError?.code==='42703'||['country_scope','restaurant_id'].some(column=>String(profileError?.message||'').includes(column))) return NextResponse.json({error:'Restaurant-scoped admin access is not installed yet. Run ADMIN_ACCOUNTS_MIGRATION.sql in Supabase.'},{status:503});
       if(profileError||!profile?.active||!['inventory','admin','super_admin'].includes(profile.role)) return NextResponse.json({error:'This account does not have active dashboard access.'},{status:403});
       if(profile.country_scope!==serverDeploymentCountry()) return NextResponse.json({error:`This account cannot access the ${serverDeploymentCountry()} admin deployment.`},{status:403});
-      session={type:'account',userId:profile.user_id,username:profile.username,displayName:profile.display_name,role:profile.role,mustChangePassword:Boolean(profile.must_change_password),emergency:false,countryScope:profile.country_scope};
+      session={type:'account',userId:profile.user_id,username:profile.username,displayName:profile.display_name,role:profile.role,mustChangePassword:Boolean(profile.must_change_password),emergency:false,countryScope:profile.country_scope,restaurantId:profile.restaurant_id||null};
     }
     attempts.delete(key);
     const response = NextResponse.json({ ok: true });

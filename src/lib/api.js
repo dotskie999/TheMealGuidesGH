@@ -17,6 +17,14 @@ function missingColumn(error, column) {
   return error?.code === 'PGRST204' && String(error.message || '').includes(`'${column}'`);
 }
 
+function missingSchemaColumn(error) {
+  if (!['PGRST204', '42703'].includes(error?.code)) return '';
+  const message = String(error.message || '');
+  return message.match(/'([^']+)' column/i)?.[1]
+    || message.match(/column ["']?([a-z0-9_]+)["']? does not exist/i)?.[1]
+    || '';
+}
+
 function cleanRecord(record = {}) {
   return Object.fromEntries(
     Object.entries(record).map(([key, value]) => [key, value === '' || value === undefined ? null : value]),
@@ -134,19 +142,31 @@ export async function getAdminData() {
   const {data:restaurants,error:restaurantError}=await supabaseAdmin.from('restaurants').select('*').in('market_code',serverMarketCodes());
   if(restaurantError) throw databaseError(restaurantError,'load admin restaurants');
   const restaurantIds=(restaurants||[]).map(row=>row.restaurant_id);
-  const [categories,menuItems,allGroups,allOptions,guests]=await Promise.all([
+  const [categories,menuItems,allGroups,allOptions,guests,guestVisits]=await Promise.all([
     scopedRows('categories','restaurant_id',restaurantIds),
     scopedRows('menu_items','restaurant_id',restaurantIds),
     selectAll('option_groups'),
     selectAll('options'),
     getGuests(),
+    getGuestRestaurantVisits(restaurantIds),
   ]);
   const categoryIds=new Set(categories.map(row=>String(row.category_id)));
   const itemIds=new Set(menuItems.map(row=>String(row.item_id)));
   const optionGroups=allGroups.filter(row=>row.item_id?itemIds.has(String(row.item_id)):categoryIds.has(String(row.category_id)));
   const groupIds=new Set(optionGroups.map(row=>String(row.group_id)));
   const options=allOptions.filter(row=>groupIds.has(String(row.group_id)));
-  return { restaurants, categories, menuItems, optionGroups, options, guests };
+  const restaurantNames=new Map((restaurants||[]).map(row=>[String(row.restaurant_id),row.name]));
+  const visitsByGuest=new Map();
+  for(const visit of guestVisits){
+    const rows=visitsByGuest.get(String(visit.guest_id))||[];
+    rows.push({...visit,restaurant_name:restaurantNames.get(String(visit.restaurant_id))||visit.restaurant_id});
+    visitsByGuest.set(String(visit.guest_id),rows);
+  }
+  const guestsWithRestaurants=(guests||[]).map(guest=>({
+    ...guest,
+    restaurant_visits:(visitsByGuest.get(String(guest.guest_id))||[]).sort((a,b)=>new Date(b.last_visited_at||0)-new Date(a.last_visited_at||0)),
+  }));
+  return { restaurants, categories, menuItems, optionGroups, options, guests:guestsWithRestaurants };
 }
 
 export async function getAdminSnapshot() {
@@ -304,6 +324,18 @@ export async function getGuests() {
   return data || [];
 }
 
+export async function getGuestRestaurantVisits(restaurantIds=[]) {
+  if(!restaurantIds.length) return [];
+  const {data,error}=await supabaseAdmin
+    .from('guest_restaurant_visits')
+    .select('*')
+    .in('restaurant_id',restaurantIds)
+    .order('last_visited_at',{ascending:false});
+  if(error&&['PGRST205','42P01'].includes(error.code)) return [];
+  if(error) throw databaseError(error,'load restaurant guest visits');
+  return data||[];
+}
+
 export async function saveGuest(payload = {}) {
   const guestId = String(payload.guest_id || '');
   const customerName = String(payload.customer_name || '').trim();
@@ -380,6 +412,37 @@ export async function saveGuest(payload = {}) {
   return guestResult.data;
 }
 
+export async function saveGuestRestaurantVisit(payload={}) {
+  const guestId=String(payload.guest_id||'').trim();
+  const restaurantId=String(payload.restaurant_id||'').trim();
+  if(!/^[0-9a-f-]{36}$/i.test(guestId)) throw new Error('Invalid guest identifier.');
+  if(!restaurantId) throw new Error('A restaurant is required.');
+  await scopedRestaurant(restaurantId,true);
+  const {data:guest,error:guestError}=await supabaseAdmin.from('guests').select('guest_id').eq('guest_id',guestId).maybeSingle();
+  if(guestError) throw databaseError(guestError,'find the visiting guest');
+  if(!guest) throw new Error('Save the guest profile before recording a restaurant visit.');
+  const {data:existing,error:readError}=await supabaseAdmin
+    .from('guest_restaurant_visits')
+    .select('visit_count,first_visited_at')
+    .eq('guest_id',guestId)
+    .eq('restaurant_id',restaurantId)
+    .maybeSingle();
+  if(readError&&['PGRST205','42P01'].includes(readError.code)) throw new Error('Restaurant guest visits are not installed yet. Run GUEST_RESTAURANT_VISITS_MIGRATION.sql in Supabase.');
+  if(readError) throw databaseError(readError,'find the restaurant guest visit');
+  const now=new Date().toISOString();
+  const record={
+    guest_id:guestId,
+    restaurant_id:restaurantId,
+    first_visited_at:existing?.first_visited_at||now,
+    last_visited_at:now,
+    visit_count:Number(existing?.visit_count||0)+1,
+  };
+  const {data,error}=await supabaseAdmin.from('guest_restaurant_visits').upsert(record,{onConflict:'guest_id,restaurant_id'}).select().single();
+  if(error&&['PGRST205','42P01'].includes(error.code)) throw new Error('Restaurant guest visits are not installed yet. Run GUEST_RESTAURANT_VISITS_MIGRATION.sql in Supabase.');
+  if(error) throw databaseError(error,'save the restaurant guest visit');
+  return data;
+}
+
 async function upsert(table, keyField, record, idPrefix) {
   const cleaned = cleanRecord(record);
   if (!cleaned[keyField]) cleaned[keyField] = newId(idPrefix);
@@ -407,7 +470,10 @@ export async function saveRestaurant(record={}) {
     cleaned.weekly_hours=normalizeWeeklyHours(cleaned.weekly_hours);
   }
   const result=await supabaseAdmin.from('restaurants').upsert(cleanRecord({...cleaned,restaurant_id:cleaned.restaurant_id||newId('r')}),{onConflict:'restaurant_id'}).select().single();
-  if(result.error&&['PGRST204','42703'].includes(result.error.code)) throw new Error('Restaurant hours are not installed yet. Run RESTAURANT_HOURS_MIGRATION.sql in Supabase, then try again.');
+  const missingRestaurantColumn=missingSchemaColumn(result.error);
+  if(missingRestaurantColumn==='sort_order') throw new Error('Restaurant ordering is not installed yet. Run RESTAURANT_SORT_MIGRATION.sql in Supabase, then try again.');
+  if(['timezone','weekly_hours','orders_paused','pause_message'].includes(missingRestaurantColumn)) throw new Error(`Restaurant hours are missing the ${missingRestaurantColumn} field. Run RESTAURANT_HOURS_MIGRATION.sql in Supabase, then try again.`);
+  if(missingRestaurantColumn) throw new Error(`The restaurants.${missingRestaurantColumn} field is not installed in Supabase yet.`);
   if(result.error) throw databaseError(result.error,'save restaurants');
   return result.data;
 }

@@ -10,3 +10,5 @@ where timezone is null and market_code like 'gh-%';
 
 comment on column public.restaurants.weekly_hours is
   'JSON object keyed 0-6 (Sunday-Saturday), each containing closed, open, close, break_enabled, break_start, and break_end.';
+
+notify pgrst, 'reload schema';

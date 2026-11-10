@@ -10,15 +10,15 @@ export async function resolveAdminSession(token) {
   const tokenSession = verifyAdminToken(token);
   if (!tokenSession) return null;
   if (tokenSession.type === 'emergency') return {
-    type:'emergency', userId:null, displayName:'Emergency access', email:null, role:'super_admin', emergency:true, countryScope:serverDeploymentCountry(),
+    type:'emergency', userId:null, displayName:'Emergency access', email:null, role:'super_admin', emergency:true, countryScope:serverDeploymentCountry(), restaurantId:null,
   };
   let { data, error } = await supabaseAdmin
     .from('admin_profiles')
-    .select('user_id,username,display_name,role,active,must_change_password,country_scope')
+    .select('user_id,username,display_name,role,active,must_change_password,country_scope,restaurant_id')
     .eq('user_id', tokenSession.userId)
     .maybeSingle();
   if (error || !data || !data.active || !ADMIN_ROLES.includes(data.role) || data.country_scope!==serverDeploymentCountry()) return null;
-  return { type:'account', userId:data.user_id, username:data.username, displayName:data.display_name, role:data.role, mustChangePassword:Boolean(data.must_change_password), emergency:false, countryScope:data.country_scope };
+  return { type:'account', userId:data.user_id, username:data.username, displayName:data.display_name, role:data.role, mustChangePassword:Boolean(data.must_change_password), emergency:false, countryScope:data.country_scope, restaurantId:data.restaurant_id||null };
 }
 
 export async function logAdminAction(session, action, targetType = null, targetId = null, details = {}) {
@@ -28,6 +28,7 @@ export async function logAdminAction(session, action, targetType = null, targetI
     actor_role:session.role,
     actor_type:session.emergency?'emergency':'account',
     country_scope:session.countryScope||serverDeploymentCountry(),
+    restaurant_id:session.restaurantId||null,
     action,
     target_type:targetType,
     target_id:targetId ? String(targetId) : null,

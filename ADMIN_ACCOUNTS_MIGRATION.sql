@@ -9,6 +9,7 @@ create table if not exists public.admin_profiles (
   country_scope text not null default 'GH' check (country_scope = 'GH'),
   active boolean not null default true,
   must_change_password boolean not null default false,
+  restaurant_id text references public.restaurants(restaurant_id) on delete restrict,
   created_at timestamptz not null default now(),
   created_by uuid references auth.users(id) on delete set null,
   updated_at timestamptz not null default now()
@@ -17,6 +18,7 @@ create table if not exists public.admin_profiles (
 alter table public.admin_profiles add column if not exists username text;
 alter table public.admin_profiles add column if not exists must_change_password boolean not null default false;
 alter table public.admin_profiles add column if not exists country_scope text not null default 'GH';
+alter table public.admin_profiles add column if not exists restaurant_id text references public.restaurants(restaurant_id) on delete restrict;
 alter table public.admin_profiles alter column country_scope set default 'GH';
 update public.admin_profiles set username = lower(split_part(email, '@', 1)) where username is null;
 alter table public.admin_profiles alter column username set not null;
@@ -29,6 +31,7 @@ create table if not exists public.admin_activity_logs (
   actor_role text not null,
   actor_type text not null check (actor_type in ('account', 'emergency')),
   country_scope text not null default 'GH' check (country_scope = 'GH'),
+  restaurant_id text references public.restaurants(restaurant_id) on delete set null,
   action text not null,
   target_type text,
   target_id text,
@@ -38,8 +41,11 @@ create table if not exists public.admin_activity_logs (
 
 create index if not exists admin_activity_logs_created_idx on public.admin_activity_logs (created_at desc);
 alter table public.admin_activity_logs alter column country_scope set default 'GH';
+alter table public.admin_activity_logs add column if not exists restaurant_id text references public.restaurants(restaurant_id) on delete set null;
 create index if not exists admin_profiles_country_scope_idx on public.admin_profiles (country_scope, active);
+create index if not exists admin_profiles_restaurant_idx on public.admin_profiles (restaurant_id, active);
 create index if not exists admin_activity_logs_country_scope_idx on public.admin_activity_logs (country_scope, created_at desc);
+create index if not exists admin_activity_logs_restaurant_idx on public.admin_activity_logs (restaurant_id, created_at desc);
 alter table public.admin_profiles enable row level security;
 alter table public.admin_activity_logs enable row level security;
 

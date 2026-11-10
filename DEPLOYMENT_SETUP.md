@@ -8,6 +8,7 @@ This repository deploys one Ghana storefront and administration dashboard for Gr
 2. Run [GREATER_ACCRA_MARKET_MIGRATION.sql](./GREATER_ACCRA_MARKET_MIGRATION.sql).
 3. Run the remaining feature migrations that apply to an older database.
 4. Run [ADMIN_ACCOUNTS_MIGRATION.sql](./ADMIN_ACCOUNTS_MIGRATION.sql) and [ADMIN_PASSWORD_CHANGE_MIGRATION.sql](./ADMIN_PASSWORD_CHANGE_MIGRATION.sql).
+5. Run [GUEST_RESTAURANT_VISITS_MIGRATION.sql](./GUEST_RESTAURANT_VISITS_MIGRATION.sql) to count restaurant page visits and expose only the relevant guests to each restaurant account. This idempotent migration also installs the restaurant sort field required by the current admin editor.
 
 The Greater Accra migration makes all new restaurant, guest, and order records Ghana-scoped. Legacy rows from another system are not exposed by this application; archive them separately if they remain in the database.
 
@@ -52,4 +53,5 @@ Do not expose the Supabase secret or Geoapify key through a `NEXT_PUBLIC_` varia
 - Delivery requires a confirmed Greater Accra map pin.
 - Customers can arrange and pay their own rider or choose store pickup.
 - `/admin` accepts only active Ghana-scoped staff accounts.
+- Normal admin accounts see only their assigned restaurant; emergency PIN access sees all restaurants.
 - New orders appear in the dashboard and trigger enabled alerts.

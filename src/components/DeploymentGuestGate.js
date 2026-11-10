@@ -23,7 +23,7 @@ export default function DeploymentGuestGate({ children }) {
   const { guest, guestReady, saveGuest } = useGuest();
   const [step, setStep] = useState('location');
   const [form, setForm] = useState(initialForm);
-  const [saving, setSaving] = useState(false);
+  const [complete,setComplete]=useState(false);
   const [mapOpen,setMapOpen]=useState(false);
   const [geoStatus,setGeoStatus]=useState('idle');
   const [geoMessage,setGeoMessage]=useState('');
@@ -134,13 +134,20 @@ export default function DeploymentGuestGate({ children }) {
     setLocationMessage('Your delivery pin is saved. You can adjust it again from your guest card or during checkout.');
     window.setTimeout(()=>setStep('details'),250);
   };
-  const submitDetails = async (event) => {
+  const submitDetails = (event) => {
     event.preventDefault(); setError(''); if(!form.consent){setError('Please confirm your consent to continue.');return;} const phone=form.contact_number.replace(/\s/g,'');
-    if(!validPhone(phone)){setError(`Use a valid ${market.country} number beginning with ${market.phonePrefix}.`);return;} setSaving(true);
-    try{const {consent,...details}=form;await saveGuest({...details,country_code:DEPLOYMENT_COUNTRY,market_selection_source:'deployment',contact_number:phone});}catch(err){setError(err.message);setSaving(false);}
+    if(!validPhone(phone)){setError(`Use a valid ${market.country} number beginning with ${market.phonePrefix}.`);return;}
+    const {consent,...details}=form;
+    const record={...details,country_code:DEPLOYMENT_COUNTRY,market_selection_source:'deployment',contact_number:phone};
+    try{
+      saveGuest(record);
+      setComplete(true);
+    }catch{
+      setError('Could not save your details in this browser. Check that site storage is allowed and try again.');
+    }
   };
 
-  if(exempt||(guest&&guestHasConfirmedPin)) return children;
+  if(complete||exempt||(guest&&guestHasConfirmedPin)) return children;
   if(!guestReady) return <GuestLoading message="Preparing your table…"/>;
   if(step==='finding') return <GuestLoading message="Finding your flavor nearby…"/>;
   return <main className="guest-onboarding"><section className="guest-card"><Image src="/the-meal-guides-logo.png" alt="The Meal Guides" width={150} height={100} priority/>
@@ -152,7 +159,7 @@ export default function DeploymentGuestGate({ children }) {
       <p className="address-location-note full"><MapPin size={17}/><span>Your GPS only suggests a starting point. Delivery uses the pin you confirm on the map.</span></p>{error&&<p className="form-error full">{error}</p>}
       <button className="primary-button full" disabled={form.location_source!=='map_pin'}>Use this delivery pin <ArrowRight size={19}/></button>
     </form></>:<><span className="guest-step"><Sparkles size={15}/> Almost ready to feast</span><h1>Who are we guiding?</h1><p>We found your neighborhood. Tell us who should receive the delicious news.</p><form onSubmit={submitDetails} className="guest-form">
-      {locationMessage&&<p className="address-result full"><MapPin size={17}/>{locationMessage}</p>}<label className="full"><span>Customer name</span><input name="customer_name" value={form.customer_name} onChange={update} autoComplete="name" required/></label><label className="full"><span>Customer email</span><input type="email" name="customer_email" value={form.customer_email} onChange={update} autoComplete="email" required/></label><label className="full"><span>Customer contact</span><input name="contact_number" value={form.contact_number} onChange={update} inputMode="tel" autoComplete="tel" required/></label><label className="consent-box full"><input type="checkbox" name="consent" checked={form.consent} onChange={update}/><ShieldCheck size={21}/><span>By submitting my details, I consent to their use for order processing, address-based distance estimates, and delivery only. Information will be handled securely and not shared beyond what is necessary to complete the transaction.</span></label>{error&&<p className="form-error full">{error}</p>}<button className="primary-button full" disabled={saving}>{saving?<><Loader2 className="spin"/> Saving your seat…</>:<>Take me to the feast <ArrowRight size={19}/></>}</button>
+      {locationMessage&&<p className="address-result full"><MapPin size={17}/>{locationMessage}</p>}<label className="full"><span>Customer name</span><input name="customer_name" value={form.customer_name} onChange={update} autoComplete="name" required/></label><label className="full"><span>Customer email</span><input type="email" name="customer_email" value={form.customer_email} onChange={update} autoComplete="email" required/></label><label className="full"><span>Customer contact</span><input name="contact_number" value={form.contact_number} onChange={update} inputMode="tel" autoComplete="tel" required/></label><label className="consent-box full"><input type="checkbox" name="consent" checked={form.consent} onChange={update}/><ShieldCheck size={21}/><span>By submitting my details, I consent to their use for order processing and delivery only. Information will be handled securely and not shared beyond what is necessary to complete the transaction.</span></label>{error&&<p className="form-error full">{error}</p>}<button className="primary-button full">Take me to the feast <ArrowRight size={19}/></button>
     </form></>}
   </section>{mapOpen&&<LocationPinModal marketCode={form.market_code} latitude={form.latitude} longitude={form.longitude} locationAccuracy={form.location_accuracy} address={form.formatted_address} initialLocation={{city:form.city,barangay:form.barangay,house_number:form.house_number}} onClose={closeMap} onConfirm={applyPinnedLocation}/>}</main>;
 }

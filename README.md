@@ -40,7 +40,7 @@ The application accepts only the `gh-greater-accra` market and uses Ghana-specif
    npm ci
    ```
 
-2. Create the database using [SUPABASE_MIGRATION_GUIDE.md](./SUPABASE_MIGRATION_GUIDE.md), then run the applicable migration files. Run [GREATER_ACCRA_MARKET_MIGRATION.sql](./GREATER_ACCRA_MARKET_MIGRATION.sql) to enforce Ghana defaults and consolidate legacy Accra/Tema market codes.
+2. Create the database using [SUPABASE_MIGRATION_GUIDE.md](./SUPABASE_MIGRATION_GUIDE.md), then run the applicable migration files. Run [GREATER_ACCRA_MARKET_MIGRATION.sql](./GREATER_ACCRA_MARKET_MIGRATION.sql) to enforce Ghana defaults and consolidate legacy Accra/Tema market codes. Run [GUEST_RESTAURANT_VISITS_MIGRATION.sql](./GUEST_RESTAURANT_VISITS_MIGRATION.sql) to enable restaurant-specific guest visit history.
 
 3. Copy `.env.example` to `.env.local` and replace every placeholder:
 

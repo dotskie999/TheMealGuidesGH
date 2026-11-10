@@ -625,6 +625,11 @@ textarea { resize:vertical; min-height:88px; }
 .guest-admin-card p { margin-top:8px; display:flex; align-items:flex-start; gap:8px; color:var(--muted); font-size:.82rem; line-height:1.4; }
 .guest-admin-card p svg { flex:0 0 auto; color:var(--orange-deep); }
 .guest-admin-card a { color:var(--brown); overflow-wrap:anywhere; }
+.guest-restaurant-visits { margin-top:13px; padding:11px; display:grid; gap:8px; border:1px solid #eadcc8; border-radius:12px; background:#fff; }
+.guest-restaurant-visits > strong { color:var(--brown); font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; }
+.guest-restaurant-visits > span { display:grid; grid-template-columns:18px 1fr; align-items:center; column-gap:6px; color:var(--orange-deep); }
+.guest-restaurant-visits > span b { color:var(--ink); font-size:.8rem; }
+.guest-restaurant-visits > span small { grid-column:2; color:var(--muted); font-size:.68rem; }
 .guest-admin-card footer { margin-top:13px; padding-top:10px; border-top:1px solid var(--line); color:#958477; font-size:.68rem; }
 .admin-modal-bg { position:fixed; z-index:80; inset:0; padding:20px; display:grid; place-items:center; background:rgba(48,27,17,.62); backdrop-filter:blur(5px); }
 .admin-modal { width:min(100%,570px); max-height:92vh; overflow:auto; border-radius:24px; background:var(--cream); box-shadow:var(--shadow); }
