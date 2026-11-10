@@ -76,7 +76,7 @@ export default function DeploymentGuestGate({ children }) {
       if(!bestPosition||!Number.isFinite(previousAccuracy)||(Number.isFinite(accuracy)&&accuracy<previousAccuracy)) bestPosition=position;
       const bestAccuracy=Number(bestPosition.coords.accuracy);
       if(Number.isFinite(bestAccuracy)) setGeoMessage(`Improving GPS accuracy… currently about ${Math.max(1,Math.round(bestAccuracy))} metres.`);
-      if((Number.isFinite(accuracy)&&accuracy<=30)||deadlinePassed) finishWithPosition(bestPosition);
+      if((Number.isFinite(accuracy)&&accuracy<=80)||deadlinePassed) finishWithPosition(bestPosition);
     };
     const handleError=(reason)=>{
       if(disposed||finished) return;
@@ -86,11 +86,11 @@ export default function DeploymentGuestGate({ children }) {
       setGeoStatus(reason.code===1?'denied':'unavailable');
       setGeoMessage(reason.code===1?'Location permission was not allowed. Search or move the pin on the map instead.':'We could not detect your location. Search or move the pin on the map instead.');
     };
-    watchId=navigator.geolocation.watchPosition(handlePosition,handleError,{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    watchId=navigator.geolocation.watchPosition(handlePosition,handleError,{enableHighAccuracy:true,timeout:8000,maximumAge:0});
     settleTimer=window.setTimeout(()=>{
       deadlinePassed=true;
       if(bestPosition) finishWithPosition(bestPosition);
-    },9000);
+    },3500);
     return()=>{disposed=true;clearGps();if(cancelGeoWatch.current===cancelGps)cancelGeoWatch.current=()=>{};geoRequested.current=false;};
   },[exempt,guest,guestHasConfirmedPin,guestReady,step]);
 
@@ -132,7 +132,7 @@ export default function DeploymentGuestGate({ children }) {
     if(form.location_source!=='map_pin'||!form.formatted_address){setError('Confirm your exact delivery pin on the map before continuing.');return;}
     setStep('finding');
     setLocationMessage('Your delivery pin is saved. You can adjust it again from your guest card or during checkout.');
-    window.setTimeout(()=>setStep('details'),1000);
+    window.setTimeout(()=>setStep('details'),250);
   };
   const submitDetails = async (event) => {
     event.preventDefault(); setError(''); if(!form.consent){setError('Please confirm your consent to continue.');return;} const phone=form.contact_number.replace(/\s/g,'');

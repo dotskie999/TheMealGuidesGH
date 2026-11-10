@@ -59,11 +59,18 @@ export function GuestProvider({ children }) {
       guest_id: details.guest_id || crypto.randomUUID(),
       consent_at: details.consent_at || new Date().toISOString(),
     };
-    const saved = await syncGuest(record, true);
-    const localGuest = { ...record, ...saved };
-    localStorage.setItem(GUEST_KEY, JSON.stringify(localGuest));
-    setGuest(localGuest);
-    return localGuest;
+    localStorage.setItem(GUEST_KEY, JSON.stringify(record));
+    setGuest(record);
+    syncGuest(record, true).then((saved) => {
+      const syncedGuest = { ...record, ...saved };
+      const current = JSON.parse(localStorage.getItem(GUEST_KEY) || 'null');
+      if (current?.guest_id === record.guest_id) {
+        localStorage.setItem(GUEST_KEY, JSON.stringify({ ...current, ...saved }));
+        setGuest((active) => active?.guest_id === record.guest_id ? { ...active, ...saved } : active);
+      }
+      return syncedGuest;
+    }).catch(() => {});
+    return record;
   }, []);
 
   const updateLocation = useCallback(async ({ latitude, longitude, location_accuracy, location_source }) => {
