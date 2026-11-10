@@ -1,6 +1,6 @@
-# Google Sheets to Supabase migration guide
+# Ghana Supabase migration guide
 
-This guide is written for the current The Meal Guides application and its existing Google Sheets database.
+This guide is written for the Ghana-only The Meal Guides application and an existing Google Sheets database.
 
 The first migration should preserve the current data shape. Do not redesign the app and database simultaneously. After the Supabase version is working, orders can be normalized into separate order-item tables and the spreadsheet PIN can be replaced with Supabase Auth.
 
@@ -40,6 +40,7 @@ Open **SQL Editor** in Supabase, create a new query, paste the following SQL, an
 ```sql
 create table public.restaurants (
   restaurant_id text primary key,
+  market_code text not null default 'gh-greater-accra' check (market_code = 'gh-greater-accra'),
   name text not null,
   logo_url text,
   description text,
@@ -114,6 +115,13 @@ create table public.orders (
   restaurant_id text not null references public.restaurants(restaurant_id) on delete restrict,
   items_json jsonb not null,
   subtotal numeric(12, 2) not null check (subtotal >= 0),
+  market_code text not null default 'gh-greater-accra' check (market_code = 'gh-greater-accra'),
+  country_code text not null default 'GH' check (country_code = 'GH'),
+  currency_code text not null default 'GHS' check (currency_code = 'GHS'),
+  fulfillment_type text not null default 'doorstep' check (fulfillment_type in ('doorstep', 'pickup')),
+  delivery_fee numeric(12, 2) not null default 0,
+  order_total numeric(12, 2) not null default 0,
+  delivery_provider text,
   customer_name text not null,
   customer_email text,
   contact_number text not null,
@@ -139,12 +147,16 @@ create index orders_restaurant_timestamp_idx
 
 create table public.guests (
   guest_id uuid primary key,
+  market_code text not null default 'gh-greater-accra' check (market_code = 'gh-greater-accra'),
+  country_code text not null default 'GH' check (country_code = 'GH'),
   customer_name text not null,
   customer_email text not null,
   contact_number text not null,
   city text not null,
   barangay text not null,
   house_number text not null,
+  formatted_address text,
+  digital_address text,
   landmark text,
   latitude double precision check (latitude is null or latitude between -90 and 90),
   longitude double precision check (longitude is null or longitude between -180 and 180),

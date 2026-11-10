@@ -1,38 +1,36 @@
-# The Meal Guides
+# The Meal Guides Ghana
 
-Mobile-first, multi-restaurant ordering built with Next.js and Supabase. Customers can discover nearby kitchens, customize menu items, place guest orders, and save a downloadable receipt. A PIN-protected dashboard manages restaurants, menus, add-ons, guests, and order status.
+Ghana-only, mobile-first multi-restaurant ordering for Greater Accra. Customers can discover nearby kitchens, customize menu items, confirm an exact map pin, place an order, and save a receipt. Staff manage restaurants, menus, add-ons, guests, orders, and accounts from a protected dashboard.
 
 ## Features
 
-- Responsive restaurant storefront and categorized menus
-- Address-based geocoding with free straight-line distance and estimated travel time
-- Restaurant delivery-radius indicators and nearest-first sorting
+- Greater Accra restaurant discovery and categorized menus
+- Ghana cedi pricing and `+233` contact-number validation
+- GPS-assisted map-pin confirmation with Geoapify or OpenStreetMap fallback
+- Customer-arranged rider or store-pickup fulfillment
 - Configurable single- and multiple-choice add-ons
-- Consent-based guest profiles saved for returning visits
-- NCR city and barangay lookup with editable checkout details
-- Server-validated menu prices, add-ons, quantities, and order totals
+- Consent-based guest profiles for returning visitors
+- Server-validated menu prices, add-ons, quantities, and totals
 - Downloadable PNG order receipts
-- Facebook links for The Meal Guides
-- PIN-protected administration dashboard
-- Restaurant, category, menu, add-on, guest, order-status, and CSV report management
-- Restaurant and category filters in the administration dashboard
+- Role-based administration with activity logging
+- Restaurant hours, order pausing, menu sorting, and CSV reports
+
+The application accepts only the `gh-greater-accra` market and uses Ghana-specific location, currency, contact-number, fulfillment, and administration behavior.
 
 ## Technology
 
 - Next.js 14 and React 18
-- Supabase/Postgres
+- Supabase/Postgres and Supabase Auth
 - Tailwind/PostCSS plus application CSS
+- Leaflet, Geoapify, and OpenStreetMap/Nominatim
 - Lucide icons
-- PSGC Cloud for NCR city and barangay lists
-- OpenStreetMap/Nominatim geocoding and the Haversine formula for distance estimates
-
-No paid map or routing API is required. City and barangay lookups are cached in Supabase. Travel times are estimates derived from straight-line distance and are not live-traffic ETAs.
 
 ## Requirements
 
 - Node.js 20 or newer
 - npm
 - A Supabase project
+- A Geoapify API key is recommended for address autocomplete and reverse geocoding
 
 ## Local setup
 
@@ -42,19 +40,16 @@ No paid map or routing API is required. City and barangay lookups are cached in 
    npm ci
    ```
 
-2. Create the database. For a new project, follow [SUPABASE_MIGRATION_GUIDE.md](./SUPABASE_MIGRATION_GUIDE.md). For an existing project created before guest profiles and geolocation, run these migrations in order:
-
-   - [GUESTS_MIGRATION.sql](./GUESTS_MIGRATION.sql)
-   - [GEOLOCATION_MIGRATION.sql](./GEOLOCATION_MIGRATION.sql)
-   - [ADDRESS_GEOCODING_MIGRATION.sql](./ADDRESS_GEOCODING_MIGRATION.sql)
+2. Create the database using [SUPABASE_MIGRATION_GUIDE.md](./SUPABASE_MIGRATION_GUIDE.md), then run the applicable migration files. Run [GREATER_ACCRA_MARKET_MIGRATION.sql](./GREATER_ACCRA_MARKET_MIGRATION.sql) to enforce Ghana defaults and consolidate legacy Accra/Tema market codes.
 
 3. Copy `.env.example` to `.env.local` and replace every placeholder:
 
    ```env
    SUPABASE_URL="https://your-project.supabase.co"
    SUPABASE_SECRET_KEY="your-server-secret-key"
-   ADMIN_PIN="your-private-admin-pin"
+   ADMIN_PIN="your-private-emergency-pin"
    ADMIN_SESSION_SECRET="a-long-random-production-secret"
+   GEOAPIFY_API_KEY="your-geoapify-key"
    ```
 
 4. Start the development server:
@@ -63,13 +58,7 @@ No paid map or routing API is required. City and barangay lookups are cached in 
    npm run dev
    ```
 
-5. Open [http://localhost:3000](http://localhost:3000). If that port is occupied, Next.js will print the alternate port in the terminal. The dashboard is available at `/admin`.
-
-## Configure restaurant distance
-
-Open **Admin → Restaurants** and enter the business address, latitude, longitude, and delivery radius for each restaurant. Customer coordinates are estimated from the submitted city and barangay; the app does not request the phone's live location or send the exact house/street to the geocoder.
-
-Estimated customer-area coordinates are server-only data and are covered by the onboarding consent notice. Do not expose the Supabase secret key to client components.
+5. Open <http://localhost:3000>. The dashboard is available at `/admin`.
 
 ## Validation
 
@@ -81,19 +70,7 @@ npm run check
 
 ## Deployment
 
-Deploy to Vercel or another Node.js-compatible platform and configure all four environment variables from `.env.example` in the provider’s encrypted environment settings.
-
-For production:
-
-- Keep the OpenStreetMap attribution visible and review Nominatim usage limits before significantly increasing traffic.
-- Use a unique, strong `ADMIN_SESSION_SECRET` and private `ADMIN_PIN`.
-- Keep `SUPABASE_SECRET_KEY` server-only.
-- Confirm Row Level Security and the grants in the migration guide.
-- Review the consent wording whenever analytics or advertising integrations are introduced.
-
-## Legacy Google Sheets backend
-
-The `google-apps-script/` directory is retained only as migration and rollback reference. The current application reads and writes through Supabase.
+See [DEPLOYMENT_SETUP.md](./DEPLOYMENT_SETUP.md). Configure the five environment variables from `.env.example` in encrypted hosting settings. Keep the Supabase secret key server-only, use a unique session secret and emergency PIN, and retain OpenStreetMap attribution.
 
 ## Social
 

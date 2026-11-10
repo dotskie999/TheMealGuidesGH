@@ -7,7 +7,7 @@ const DAYS=[
 
 export const RESTAURANT_DAYS=DAYS;
 export const DEFAULT_WEEKLY_HOURS=Object.fromEntries(DAYS.map(day=>[day.key,{closed:false,open:'09:00',close:'22:00',break_enabled:false,break_start:'12:00',break_end:'13:00'}]));
-export const marketTimezone=(marketCode)=>String(marketCode||'').startsWith('gh-')?'Africa/Accra':'Asia/Manila';
+export const marketTimezone=()=>'Africa/Accra';
 
 const validTime=(value)=>/^([01]\d|2[0-3]):[0-5]\d$/.test(String(value||''));
 const minutes=(value)=>{const [hour,minute]=String(value).split(':').map(Number);return hour*60+minute;};

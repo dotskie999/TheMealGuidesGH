@@ -29,10 +29,10 @@ export function GuestProvider({ children }) {
         const marketCode = normalizeMarketCode(stored.market_code || DEFAULT_MARKET);
         const market = getMarket(marketCode);
         const migratedStored = { ...stored, market_code:marketCode, country_code:market.countryCode, market_selection_source:'deployment' };
-        const trustedLocation=market.countryCode==='GH'?migratedStored.location_source==='map_pin':['address','map_pin'].includes(migratedStored.location_source);
+        const trustedLocation=migratedStored.location_source==='map_pin';
         const safeStored = trustedLocation ? migratedStored : {
           ...migratedStored,
-          formatted_address: market.countryCode==='GH'?'':migratedStored.formatted_address,
+          formatted_address: '',
           latitude: null,
           longitude: null,
           location_accuracy: null,
@@ -41,26 +41,9 @@ export function GuestProvider({ children }) {
         setGuest(safeStored);
         localStorage.setItem(GUEST_KEY, JSON.stringify(safeStored));
         (async () => {
-          let refreshed = safeStored;
-          if (market.countryCode!=='GH'&&!['address','map_pin'].includes(safeStored.location_source) && safeStored.city && safeStored.barangay) {
-            try {
-              const response = await fetch('/api/geocode', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ city: safeStored.city, barangay: safeStored.barangay, market_code:safeStored.market_code }),
-              });
-              const result = await response.json();
-              if (response.ok && result.location) refreshed = {
-                ...safeStored,
-                latitude: result.location.latitude,
-                longitude: result.location.longitude,
-                location_source: 'address',
-              };
-            } catch {}
-          }
-          const saved = await syncGuest(refreshed).catch(() => null);
+          const saved = await syncGuest(safeStored).catch(() => null);
           if (saved) {
-            const nextGuest = { ...refreshed, ...saved };
+            const nextGuest = { ...safeStored, ...saved };
             localStorage.setItem(GUEST_KEY, JSON.stringify(nextGuest));
             setGuest(nextGuest);
           }

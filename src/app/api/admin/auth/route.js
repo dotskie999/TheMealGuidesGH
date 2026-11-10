@@ -40,7 +40,7 @@ export async function POST(request) {
         return NextResponse.json({error:'Invalid username or password.'},{status:401});
       }
       const {data:profile,error:profileError}=await supabaseAdmin.from('admin_profiles').select('user_id,username,display_name,role,active,must_change_password,country_scope').eq('user_id',authData.user.id).maybeSingle();
-      if(profileError?.code==='42703'||String(profileError?.message||'').includes('country_scope')) return NextResponse.json({error:'Country-separated admin access is not installed yet. Run DEPLOYMENT_SEPARATION_MIGRATION.sql in Supabase.'},{status:503});
+      if(profileError?.code==='42703'||String(profileError?.message||'').includes('country_scope')) return NextResponse.json({error:'Ghana admin access is not installed yet. Run ADMIN_ACCOUNTS_MIGRATION.sql in Supabase.'},{status:503});
       if(profileError||!profile?.active||!['inventory','admin','super_admin'].includes(profile.role)) return NextResponse.json({error:'This account does not have active dashboard access.'},{status:403});
       if(profile.country_scope!==serverDeploymentCountry()) return NextResponse.json({error:`This account cannot access the ${serverDeploymentCountry()} admin deployment.`},{status:403});
       session={type:'account',userId:profile.user_id,username:profile.username,displayName:profile.display_name,role:profile.role,mustChangePassword:Boolean(profile.must_change_password),emergency:false,countryScope:profile.country_scope};

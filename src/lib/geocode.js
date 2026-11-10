@@ -51,14 +51,14 @@ async function publicGeocode(city, barangay, marketCode, houseNumber, landmark) 
   return task;
 }
 
-export async function geocodeDeliveryArea(cityValue, barangayValue, marketValue = 'ph-ncr', houseNumberValue = '', landmarkValue = '') {
+export async function geocodeDeliveryArea(cityValue, barangayValue, marketValue = 'gh-greater-accra', houseNumberValue = '', landmarkValue = '') {
   const city = normalize(cityValue);
   const barangay = normalize(barangayValue);
   const houseNumber=normalize(houseNumberValue);
   const landmark=normalize(landmarkValue);
   const marketCode = normalizeMarketCode(marketValue);
   if (!city || !barangay || city.length > 100 || barangay.length > 100) {
-    throw new Error('A valid city and barangay are required.');
+    throw new Error('A valid municipality and area are required.');
   }
 
   const key = cacheKey(city, barangay, marketCode, houseNumber, landmark);
@@ -84,7 +84,7 @@ export async function geocodeDeliveryArea(cityValue, barangayValue, marketValue 
   return { ...result, source:result.provider==='geoapify'?'geoapify':'openstreetmap' };
 }
 
-export async function reverseGeocodeCoordinates(latitudeValue, longitudeValue, marketValue = 'ph-ncr') {
+export async function reverseGeocodeCoordinates(latitudeValue, longitudeValue, marketValue = 'gh-greater-accra') {
   const latitude=Number(latitudeValue); const longitude=Number(longitudeValue);
   if(!Number.isFinite(latitude)||latitude < -90||latitude > 90||!Number.isFinite(longitude)||longitude < -180||longitude > 180) throw new Error('Invalid map coordinates.');
   const marketCode=normalizeMarketCode(marketValue);
@@ -106,10 +106,8 @@ export async function reverseGeocodeCoordinates(latitudeValue, longitudeValue, m
     const response=await fetch(url,{cache:'no-store',headers:{Accept:'application/json','Accept-Language':'en','User-Agent':'TheMealGuides/1.0 (https://www.facebook.com/themealguides)'}});
     if(!response.ok) throw new Error('Map address lookup is temporarily unavailable.');
     const result=await response.json(); const address=result?.address||{};
-    if(marketCode==='gh-greater-accra'){
-      const state=String(address.state||address.region||address.state_district||'').toLowerCase();
-      if(state&&!state.includes('greater accra')) throw new Error('This delivery point is outside our current Greater Accra service area.');
-    }
+    const state=String(address.state||address.region||address.state_district||'').toLowerCase();
+    if(state&&!state.includes('greater accra')) throw new Error('This delivery point is outside our current Greater Accra service area.');
     const city=address.city||address.town||address.municipality||address.county||'';
     const barangay=address.suburb||address.neighbourhood||address.quarter||address.village||address.hamlet||'';
     const road=address.road||address.pedestrian||address.residential||address.path||'';

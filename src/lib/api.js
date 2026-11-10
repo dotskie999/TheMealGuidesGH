@@ -3,11 +3,8 @@ import 'server-only';
 import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getMarket, isWithinMarketArea } from '@/lib/markets';
-import { calculateDeliveryQuote, DEFAULT_DELIVERY_SETTINGS, normalizeDeliverySettings } from '@/lib/delivery';
-import { geocodeDeliveryArea } from '@/lib/geocode';
-import { geoapifyDrivingRoute } from '@/lib/geoapify';
 import { marketTimezone, normalizeWeeklyHours, restaurantAvailability, validateWeeklyHours } from '@/lib/restaurantHours';
-import { assertServerMarket, serverDefaultMarket, serverDeploymentCountry, serverMarketCodes } from '@/lib/deploymentServer';
+import { assertServerMarket, serverDefaultMarket, serverMarketCodes } from '@/lib/deploymentServer';
 
 const ORDER_STATUSES = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
 
@@ -69,42 +66,6 @@ export async function getRestaurants() {
     .order('name');
   if (error) throw databaseError(error, 'load restaurants');
   return data || [];
-}
-
-export async function getDeliverySettings() {
-  if(serverDeploymentCountry()!=='PH') return normalizeDeliverySettings(DEFAULT_DELIVERY_SETTINGS);
-  const {data,error}=await supabaseAdmin.from('delivery_settings').select('*').eq('market_code','ph-ncr').maybeSingle();
-  if(error&&['42P01','PGRST205'].includes(error.code)) return DEFAULT_DELIVERY_SETTINGS;
-  if(error) throw databaseError(error,'load delivery settings');
-  return normalizeDeliverySettings(data||DEFAULT_DELIVERY_SETTINGS);
-}
-
-export async function saveDeliverySettings(record = {}) {
-  if(serverDeploymentCountry()!=='PH') throw new Error('Delivery fare settings are only available in the Philippines deployment.');
-  const settings=normalizeDeliverySettings({...record,market_code:'ph-ncr'});
-  for(const key of ['base_distance_km','base_fare','additional_per_km','max_internal_distance_km','peak_surcharge','storm_surcharge']){
-    if(!Number.isFinite(Number(settings[key]))||Number(settings[key])<0) throw new Error('Delivery amounts and distances must be valid positive numbers.');
-  }
-  if(settings.max_internal_distance_km<=settings.base_distance_km) throw new Error('Maximum fleet distance must be greater than the base distance.');
-  const {data,error}=await supabaseAdmin.from('delivery_settings').upsert({...settings,updated_at:new Date().toISOString()},{onConflict:'market_code'}).select().single();
-  if(error) throw databaseError(error,'save delivery settings');
-  return data;
-}
-
-export async function getDeliveryQuote(payload = {}) {
-  const fulfillmentType=payload.fulfillment_type==='pickup'?'pickup':'doorstep';
-  const marketCode=assertServerMarket(payload.market_code||serverDefaultMarket());
-  const latitude=payload.latitude===null||payload.latitude===undefined?null:Number(payload.latitude);
-  const longitude=payload.longitude===null||payload.longitude===undefined?null:Number(payload.longitude);
-  let route=null;
-  if(fulfillmentType==='doorstep'&&marketCode==='ph-ncr'){
-    if(!payload.restaurant_id) throw new Error('A restaurant is required for a delivery quote.');
-    const restaurant=await scopedRestaurant(payload.restaurant_id,true);
-    if(restaurant.market_code!==marketCode) throw new Error('The restaurant and delivery market do not match.');
-    route=await geoapifyDrivingRoute({fromLatitude:restaurant.latitude,fromLongitude:restaurant.longitude,toLatitude:latitude,toLongitude:longitude});
-  }
-  const settings=await getDeliverySettings();
-  return {...calculateDeliveryQuote({marketCode,fulfillmentType,distanceKm:route?.distance_km??null,settings}),...route,settings};
 }
 
 export async function getMenu(restaurantId) {
@@ -266,15 +227,15 @@ export async function submitOrder(payload = {}) {
   let deliveryLatitude = payload.latitude === null || payload.latitude === undefined ? null : Number(payload.latitude);
   let deliveryLongitude = payload.longitude === null || payload.longitude === undefined ? null : Number(payload.longitude);
   const pinnedAddress=String(payload.formatted_address||'').trim();
-  const city=String(payload.city||(market.countryCode==='GH'?market.region:'')).trim();
-  const barangay=String(payload.barangay||(market.countryCode==='GH'?(city||'Pinned location'):'')).trim();
-  const houseNumber=String(payload.house_number||(market.countryCode==='GH'?(pinnedAddress||'Map pin'):'')).trim();
+  const city=String(payload.city||market.region).trim();
+  const barangay=String(payload.barangay||(city||'Pinned location')).trim();
+  const houseNumber=String(payload.house_number||(pinnedAddress||'Map pin')).trim();
 
   for (const field of ['customer_name', 'contact_number']) {
     if (!String(payload[field] || '').trim()) throw new Error('Please complete all required customer details.');
   }
   if(!city||!barangay||!houseNumber) throw new Error('Please complete all required customer details.');
-  if(market.countryCode==='GH'&&fulfillmentType==='doorstep'&&(payload.location_source!=='map_pin'||!pinnedAddress||!Number.isFinite(deliveryLatitude)||!Number.isFinite(deliveryLongitude))){
+  if(fulfillmentType==='doorstep'&&(payload.location_source!=='map_pin'||!pinnedAddress||!Number.isFinite(deliveryLatitude)||!Number.isFinite(deliveryLongitude))){
     throw new Error('Confirm the exact Greater Accra delivery pin before placing the order.');
   }
 
@@ -283,25 +244,11 @@ export async function submitOrder(payload = {}) {
   if(fulfillmentType==='doorstep'&&Number.isFinite(deliveryLatitude)&&Number.isFinite(deliveryLongitude)&&!isWithinMarketArea(marketCode,deliveryLatitude,deliveryLongitude)){
     throw new Error(`This delivery point is outside our current ${market.region} service area.`);
   }
-  if(fulfillmentType==='doorstep'&&marketCode==='ph-ncr'){
-    const hasConfirmedPin=payload.location_source==='map_pin'&&Number.isFinite(deliveryLatitude)&&Number.isFinite(deliveryLongitude);
-    if(!hasConfirmedPin){
-      const geocoded=await geocodeDeliveryArea(payload.city,payload.barangay,marketCode,payload.house_number,payload.landmark);
-      if(!geocoded) throw new Error('We could not locate this delivery address. Please review it or select pickup.');
-      deliveryLatitude=Number(geocoded.latitude);
-      deliveryLongitude=Number(geocoded.longitude);
-    }
-  }
   const availability=restaurantAvailability(restaurantLocation);
   if(!availability.isOpen) throw new Error(`${restaurantLocation.name||'This restaurant'} is currently closed. ${availability.detail}`);
-  const route=fulfillmentType==='doorstep'&&marketCode==='ph-ncr'
-    ? await geoapifyDrivingRoute({fromLatitude:restaurantLocation.latitude,fromLongitude:restaurantLocation.longitude,toLatitude:deliveryLatitude,toLongitude:deliveryLongitude})
-    : null;
-  const deliveryDistance=route?.distance_km??null;
-  const deliverySettings=await getDeliverySettings();
-  const deliveryQuote={...calculateDeliveryQuote({marketCode,fulfillmentType,distanceKm:deliveryDistance,settings:deliverySettings}),...route};
-  if(fulfillmentType==='doorstep'&&marketCode==='ph-ncr'&&deliveryQuote.delivery_fee===null) throw new Error('We could not calculate the delivery distance. Please review the address or select pickup.');
-  const deliveryFee=Number(deliveryQuote.delivery_fee||0);
+  const deliveryDistance=null;
+  const deliveryQuote={delivery_fee:0,provider:fulfillmentType==='pickup'?'pickup':'customer',distance_km:null};
+  const deliveryFee=0;
   const orderTotal=Number((subtotal+deliveryFee).toFixed(2));
   const orderRecord = {
       restaurant_id: restaurantId,
@@ -367,9 +314,9 @@ export async function saveGuest(payload = {}) {
   const marketCode = assertServerMarket(payload.market_code||serverDefaultMarket());
   const market = getMarket(marketCode);
   const pinnedAddress=String(payload.formatted_address||'').trim();
-  const city = String(payload.city||(market.countryCode==='GH'?market.region:'')).trim();
-  const barangay = String(payload.barangay||(market.countryCode==='GH'?(city||'Pinned location'):'')).trim();
-  const houseNumber = String(payload.house_number||(market.countryCode==='GH'?(pinnedAddress||'Map pin'):'')).trim();
+  const city = String(payload.city||market.region).trim();
+  const barangay = String(payload.barangay||(city||'Pinned location')).trim();
+  const houseNumber = String(payload.house_number||(pinnedAddress||'Map pin')).trim();
   const latitude = payload.latitude === null || payload.latitude === undefined ? null : Number(payload.latitude);
   const longitude = payload.longitude === null || payload.longitude === undefined ? null : Number(payload.longitude);
   const locationAccuracy = payload.location_accuracy === null || payload.location_accuracy === undefined ? null : Number(payload.location_accuracy);
@@ -377,10 +324,10 @@ export async function saveGuest(payload = {}) {
   if (!/^[0-9a-f-]{36}$/i.test(guestId)) throw new Error('Invalid guest identifier.');
   if (!customerName || !city || !barangay || !houseNumber) throw new Error('Please complete all guest details.');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) throw new Error('Enter a valid email address.');
-  const validPhone=market.countryCode==='GH'?/^\+233\d{9}$/.test(contactNumber):/^\+63\d{10}$/.test(contactNumber);
+  const validPhone=/^\+233\d{9}$/.test(contactNumber);
   if (!validPhone) throw new Error(`Enter a valid ${market.country} contact number.`);
   if (!payload.consent_at) throw new Error('Consent is required before guest details can be saved.');
-  if(market.countryCode==='GH'&&(payload.location_source!=='map_pin'||!pinnedAddress||!Number.isFinite(latitude)||!Number.isFinite(longitude))){
+  if(payload.location_source!=='map_pin'||!pinnedAddress||!Number.isFinite(latitude)||!Number.isFinite(longitude)){
     throw new Error('Confirm the exact Greater Accra delivery pin before continuing.');
   }
   if ((latitude !== null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90))
@@ -611,14 +558,12 @@ export async function apiRequest(action, { params = {}, body = {} } = {}) {
     getOrders: () => getOrders(params.status || body.status),
     getAdminData: () => getAdminData(),
     getAdminSnapshot: () => getAdminSnapshot(),
-    getDeliverySettings: () => getDeliverySettings(),
     submitOrder: () => submitOrder(body),
     saveRestaurant: () => saveRestaurant(record),
     saveCategory: () => saveCategory(record),
     saveMenuItem: () => saveMenuItem(record),
     saveOptionGroup: () => saveOptionGroup(record),
     saveOption: () => saveOption(record),
-    saveDeliverySettings: () => saveDeliverySettings(record),
     deleteOptionGroup: () => deleteOptionGroup(body),
     deleteOption: () => deleteOption(body),
     updateOrderStatus: () => updateOrderStatus(body.order_number, body.new_status || body.status),

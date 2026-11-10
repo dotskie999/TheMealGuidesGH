@@ -195,7 +195,6 @@ textarea { resize:vertical; min-height:88px; }
 .checkout-totals > div { display:flex; align-items:center; justify-content:space-between; gap:15px; }
 .checkout-totals > div strong { color:var(--heading); }
 .checkout-totals > small { color:var(--muted); font-size:.7rem; line-height:1.35; }
-.checkout-totals > small.delivery-quote-error { color:#a73529; font-weight:800; }
 .checkout-totals .grand-total { margin-top:5px; padding-top:12px; border-top:1px dashed var(--line); font-size:1.1rem; }
 .checkout-totals .grand-total strong { font-family:var(--font-display); font-size:1.65rem; }
 .cart-items { display:grid; gap:4px; }

@@ -1,127 +1,55 @@
-# Philippines and Ghana deployment setup
+# Ghana deployment setup
 
-This project uses one GitHub repository and one Supabase project, with two independently scoped Vercel deployments.
+This repository deploys one Ghana storefront and administration dashboard for Greater Accra. Country-selection environment variables are not used; the application is fixed to country code `GH`, currency `GHS`, timezone `Africa/Accra`, and market code `gh-greater-accra`.
 
-| Deployment | Domain | Country scope | Markets |
-| --- | --- | --- | --- |
-| Philippines | `order.themealguides.com` | `PH` | `ph-ncr` |
-| Ghana | `gh.themealguides.com` | `GH` | `gh-greater-accra` |
+## 1. Prepare Supabase
 
-## 1. Update Supabase
+1. Follow [SUPABASE_MIGRATION_GUIDE.md](./SUPABASE_MIGRATION_GUIDE.md) for the base schema.
+2. Run [GREATER_ACCRA_MARKET_MIGRATION.sql](./GREATER_ACCRA_MARKET_MIGRATION.sql).
+3. Run the remaining feature migrations that apply to an older database.
+4. Run [ADMIN_ACCOUNTS_MIGRATION.sql](./ADMIN_ACCOUNTS_MIGRATION.sql) and [ADMIN_PASSWORD_CHANGE_MIGRATION.sql](./ADMIN_PASSWORD_CHANGE_MIGRATION.sql).
 
-Run `DEPLOYMENT_SEPARATION_MIGRATION.sql` once in Supabase **SQL Editor**. Existing staff accounts and activity logs are assigned to the Philippines deployment. Then run `GREATER_ACCRA_MARKET_MIGRATION.sql` to consolidate the former Accra and Tema market codes into one Greater Accra service region.
+The Greater Accra migration makes all new restaurant, guest, and order records Ghana-scoped. Legacy rows from another system are not exposed by this application; archive them separately if they remain in the database.
 
-Confirm the result:
+## 2. Create the first administrator
 
-```sql
-select username, role, country_scope, active
-from public.admin_profiles
-order by country_scope, username;
-```
-
-## 2. Create the first Ghana Super Admin
-
-Existing accounts become PH accounts. Bootstrap one Ghana account from the Supabase dashboard:
-
-1. Open **Authentication > Users > Add user**.
-2. Use an internal email following the app convention, such as `ghana_owner@staff.themealguides.local`.
-3. Set a temporary password of at least eight characters and enable automatic confirmation.
-4. Run the SQL below, replacing the email and display name if needed:
+Create a user in Supabase Authentication, then insert the matching profile:
 
 ```sql
 insert into public.admin_profiles (
-  user_id, email, username, display_name, role, active,
-  must_change_password, country_scope
+  user_id, email, username, display_name, role, country_scope, active
 )
-select
-  id, email, 'ghana_owner', 'Ghana Owner', 'super_admin', true,
-  true, 'GH'
-from auth.users
-where email = 'ghana_owner@staff.themealguides.local'
-on conflict (user_id) do update set
-  username = excluded.username,
-  display_name = excluded.display_name,
-  role = excluded.role,
-  active = excluded.active,
-  must_change_password = excluded.must_change_password,
-  country_scope = excluded.country_scope;
+values (
+  '<auth-user-uuid>',
+  '<username>@admin.themealguides.local',
+  '<username>',
+  '<display name>',
+  'super_admin',
+  'GH',
+  true
+);
 ```
 
-The login username is `ghana_owner`, not the internal email. After signing in, that Super Admin can create the remaining Ghana staff accounts normally.
+## 3. Configure hosting
 
-## 3. Test locally
+Set these encrypted environment variables in Vercel or another Node.js-compatible host:
 
-Only run one country mode at a time from the same folder.
-
-Philippines PowerShell session:
-
-```powershell
-$env:DEPLOYMENT_COUNTRY="PH"
-$env:NEXT_PUBLIC_DEPLOYMENT_COUNTRY="PH"
-npm run dev -- -p 3000
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=your-server-secret-key
+ADMIN_PIN=your-private-emergency-pin
+ADMIN_SESSION_SECRET=a-unique-long-random-secret
+GEOAPIFY_API_KEY=your-geoapify-key
 ```
 
-Open:
+Do not expose the Supabase secret or Geoapify key through a `NEXT_PUBLIC_` variable.
 
-- Storefront: `http://localhost:3000`
-- Admin: `http://localhost:3000/admin`
+## 4. Verify the deployment
 
-Stop the server with `Ctrl+C`, then start Ghana:
-
-```powershell
-$env:DEPLOYMENT_COUNTRY="GH"
-$env:NEXT_PUBLIC_DEPLOYMENT_COUNTRY="GH"
-npm run dev -- -p 3001
-```
-
-Open:
-
-- Storefront: `http://localhost:3001`
-- Admin: `http://localhost:3001/admin`
-
-## 4. Create the Philippines Vercel project
-
-Create a Vercel project from the repository and add `order.themealguides.com`.
-
-Environment variables:
-
-```text
-DEPLOYMENT_COUNTRY=PH
-NEXT_PUBLIC_DEPLOYMENT_COUNTRY=PH
-SUPABASE_URL=<shared Supabase URL>
-SUPABASE_SECRET_KEY=<shared Supabase secret key>
-GEOAPIFY_API_KEY=<Geoapify key>
-ADMIN_PIN=<Philippines-only emergency PIN>
-ADMIN_SESSION_SECRET=<unique random Philippines session secret>
-```
-
-Use **Secret** for Supabase, Geoapify, PIN, and session-secret values. Use **Config** for the two country values.
-
-## 5. Create the Ghana Vercel project
-
-Import the same GitHub repository as a second Vercel project and add `gh.themealguides.com`.
-
-Environment variables:
-
-```text
-DEPLOYMENT_COUNTRY=GH
-NEXT_PUBLIC_DEPLOYMENT_COUNTRY=GH
-SUPABASE_URL=<same shared Supabase URL>
-SUPABASE_SECRET_KEY=<same shared Supabase secret key>
-GEOAPIFY_API_KEY=<Geoapify key>
-ADMIN_PIN=<different Ghana-only emergency PIN>
-ADMIN_SESSION_SECRET=<different random Ghana session secret>
-```
-
-Do not copy the PH emergency PIN or session secret into the Ghana project.
-
-## 6. Verification checklist
-
-- PH storefront shows only `ph-*` restaurants and no country selector.
-- Ghana storefront shows only Greater Accra restaurants and does not ask guests to choose Accra or Tema.
-- PH `/admin` rejects Ghana staff accounts.
-- Ghana `/admin` rejects PH staff accounts.
-- Each admin sees only its country’s orders, guests, restaurants, menus, add-ons, staff, and activity.
-- Ghana has no Philippine delivery-fare settings tab.
-- Direct API requests using the other country’s market are rejected.
-- Admin cookies, browser guest profiles, carts, and saved receipts are country-specific.
+- The storefront displays only Greater Accra restaurants.
+- Prices are formatted in Ghana cedis.
+- Guest and checkout contact numbers require `+233` followed by nine digits.
+- Delivery requires a confirmed Greater Accra map pin.
+- Customers can arrange and pay their own rider or choose store pickup.
+- `/admin` accepts only active Ghana-scoped staff accounts.
+- New orders appear in the dashboard and trigger enabled alerts.

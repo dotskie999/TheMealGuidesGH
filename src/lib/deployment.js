@@ -1,22 +1,17 @@
-const COUNTRY_MARKETS = {
-  PH: ['ph-ncr'],
-  GH: ['gh-greater-accra'],
-};
-
 const LEGACY_MARKET_ALIASES = {
   'gh-accra':'gh-greater-accra',
   'gh-tema':'gh-greater-accra',
 };
 
 export function normalizeDeploymentCountry(value) {
-  return String(value || '').trim().toUpperCase() === 'GH' ? 'GH' : 'PH';
+  return 'GH';
 }
 
-export const DEPLOYMENT_COUNTRY = normalizeDeploymentCountry(process.env.NEXT_PUBLIC_DEPLOYMENT_COUNTRY);
-export const DEPLOYMENT_MARKET_CODES = COUNTRY_MARKETS[DEPLOYMENT_COUNTRY];
-export const DEFAULT_DEPLOYMENT_MARKET = DEPLOYMENT_COUNTRY === 'GH' ? 'gh-greater-accra' : 'ph-ncr';
-export const DEPLOYMENT_TIMEZONE = DEPLOYMENT_COUNTRY === 'GH' ? 'Africa/Accra' : 'Asia/Manila';
-export const DEPLOYMENT_COUNTRY_NAME = DEPLOYMENT_COUNTRY === 'GH' ? 'Ghana' : 'Philippines';
+export const DEPLOYMENT_COUNTRY = 'GH';
+export const DEPLOYMENT_MARKET_CODES = ['gh-greater-accra'];
+export const DEFAULT_DEPLOYMENT_MARKET = 'gh-greater-accra';
+export const DEPLOYMENT_TIMEZONE = 'Africa/Accra';
+export const DEPLOYMENT_COUNTRY_NAME = 'Ghana';
 
 export function canonicalDeploymentMarket(code) {
   const normalized=String(code||'').trim().toLowerCase();

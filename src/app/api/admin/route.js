@@ -11,7 +11,6 @@ const READ_ROLES = {
   getAdminSnapshot:['inventory','admin','super_admin'],
   getAdminAccounts:['super_admin'],
   getAdminActivity:['super_admin'],
-  getDeliverySettings:['super_admin'],
 };
 const WRITE_ROLES = {
   saveRestaurant:['inventory','admin','super_admin'],
@@ -23,7 +22,6 @@ const WRITE_ROLES = {
   deleteOptionGroup:['super_admin'],
   deleteOption:['super_admin'],
   saveAdminAccount:['super_admin'],
-  saveDeliverySettings:['super_admin'],
 };
 
 async function sessionFor(request) {
@@ -95,7 +93,7 @@ export async function GET(request) {
       if(action==='getAdminSnapshot') return NextResponse.json({...result,orders:[],guests:[]});
       if(action==='getAdminData') return NextResponse.json({...result,guests:[]});
     }
-    if(action==='getAdminSnapshot'&&session.role==='super_admin') return NextResponse.json({...result,adminAccounts:await listAdminAccounts(session),deliverySettings:session.countryScope==='PH'?await apiRequest('getDeliverySettings'):null});
+    if(action==='getAdminSnapshot'&&session.role==='super_admin') return NextResponse.json({...result,adminAccounts:await listAdminAccounts(session)});
     return NextResponse.json(result);
   } catch(error){return NextResponse.json({error:error.message},{status:500});}
 }

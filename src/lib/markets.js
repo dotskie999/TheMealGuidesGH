@@ -1,13 +1,8 @@
-import { canonicalDeploymentMarket, DEFAULT_DEPLOYMENT_MARKET, DEPLOYMENT_COUNTRY, isDeploymentMarket } from '@/lib/deployment';
+import { canonicalDeploymentMarket, DEFAULT_DEPLOYMENT_MARKET, isDeploymentMarket } from '@/lib/deployment';
 
 export const DEFAULT_MARKET = DEFAULT_DEPLOYMENT_MARKET;
 
 export const MARKETS = {
-  'ph-ncr': {
-    code: 'ph-ncr', countryCode: 'PH', country: 'Philippines', region: 'Metro Manila',
-    label: 'Metro Manila, Philippines', currency: 'PHP', locale: 'en-PH', phonePrefix: '+63',
-    cityLabel: 'City / Municipality', areaLabel: 'Barangay', digitalAddress: false,
-  },
   'gh-greater-accra': {
     code: 'gh-greater-accra', countryCode: 'GH', country: 'Ghana', region: 'Greater Accra',
     label: 'Greater Accra, Ghana', currency: 'GHS', locale: 'en-GH', phonePrefix: '+233',
@@ -16,7 +11,7 @@ export const MARKETS = {
 };
 
 export const ALL_MARKET_OPTIONS = Object.values(MARKETS);
-export const MARKET_OPTIONS = ALL_MARKET_OPTIONS.filter((market)=>market.countryCode===DEPLOYMENT_COUNTRY);
+export const MARKET_OPTIONS = ALL_MARKET_OPTIONS;
 export const getMarket = (code) => MARKETS[canonicalDeploymentMarket(code)] || MARKETS[DEFAULT_MARKET];
 export const normalizeMarketCode = (code) => {
   const canonical=canonicalDeploymentMarket(code);
@@ -29,7 +24,6 @@ export function isWithinMarketArea(marketCode, latitudeValue, longitudeValue) {
   const latitude=Number(latitudeValue); const longitude=Number(longitudeValue);
   if(!Number.isFinite(latitude)||!Number.isFinite(longitude)) return false;
   const code=getMarket(marketCode).code;
-  if(code==='ph-ncr') return inside(latitude,longitude,{south:14.3,north:14.95,west:120.75,east:121.35});
   if(code==='gh-greater-accra') return inside(latitude,longitude,{south:5.3,north:6.2,west:-0.7,east:0.5});
   return false;
 }
@@ -38,12 +32,6 @@ export function detectMarketFromCoordinates(latitudeValue, longitudeValue) {
   const latitude = Number(latitudeValue);
   const longitude = Number(longitudeValue);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return { supported:false, countryCode:null, marketCode:null };
-
-  const philippines = inside(latitude, longitude, { south:4.2, north:21.4, west:116, east:127.5 });
-  if (philippines) {
-    const metroManila = inside(latitude, longitude, { south:14.3, north:14.95, west:120.75, east:121.35 });
-    return { supported:metroManila, countryCode:'PH', marketCode:metroManila?'ph-ncr':null };
-  }
 
   const ghana = inside(latitude, longitude, { south:4.5, north:11.3, west:-3.5, east:1.5 });
   if (ghana) {

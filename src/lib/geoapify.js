@@ -2,7 +2,6 @@ import 'server-only';
 import { getMarket } from '@/lib/markets';
 
 const endpoint='https://api.geoapify.com/v1/geocode';
-const routingEndpoint='https://api.geoapify.com/v1/routing';
 const apiKey=()=>String(process.env.GEOAPIFY_API_KEY||'').trim();
 export const geoapifyConfigured=()=>Boolean(apiKey());
 
@@ -49,36 +48,4 @@ export async function geoapifyReverse({latitude,longitude,marketCode}) {
   const address=addressResult(result);
   if(!insideMarket(address,marketCode)) throw new Error('This delivery point is outside our current Greater Accra service area.');
   return address;
-}
-
-export async function geoapifyDrivingRoute({fromLatitude,fromLongitude,toLatitude,toLongitude}) {
-  if(!geoapifyConfigured()) throw new Error('Road-distance calculation is not configured.');
-  const points=[fromLatitude,fromLongitude,toLatitude,toLongitude].map(Number);
-  if(!points.every(Number.isFinite)) throw new Error('Both the restaurant and delivery pin need valid map coordinates.');
-  const [fromLat,fromLon,toLat,toLon]=points;
-  const url=new URL(routingEndpoint);
-  url.searchParams.set('waypoints',`${fromLat},${fromLon}|${toLat},${toLon}`);
-  url.searchParams.set('mode','drive');
-  url.searchParams.set('apiKey',apiKey());
-  const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),10000);
-  try {
-    const response=await fetch(url,{cache:'no-store',headers:{Accept:'application/json'},signal:controller.signal});
-    if(!response.ok) throw new Error(response.status===429?'The road-distance service limit was reached. Please try again shortly.':'The road-distance service is temporarily unavailable.');
-    const payload=await response.json();
-    const properties=payload?.features?.[0]?.properties;
-    const distanceMeters=Number(properties?.distance);
-    const durationSeconds=Number(properties?.time);
-    if(!Number.isFinite(distanceMeters)||distanceMeters<=0) throw new Error('No drivable route was found between the restaurant and delivery pin.');
-    return {
-      distance_km:Number((distanceMeters/1000).toFixed(3)),
-      route_duration_minutes:Number.isFinite(durationSeconds)?Math.max(1,Math.ceil(durationSeconds/60)):null,
-      distance_source:'road_route',
-    };
-  } catch(error) {
-    if(error?.name==='AbortError') throw new Error('The road-distance calculation timed out. Please try again.');
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
 }

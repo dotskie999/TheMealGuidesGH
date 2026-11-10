@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Loader2, MapPin, Search, X } from 'lucide-react';
 
 const marketCenter={
-  'ph-ncr':[14.5995,120.9842,12],
   'gh-greater-accra':[5.65,-0.05,11],
   'gh-accra':[5.6037,-0.1870,12],
   'gh-tema':[5.6698,0.0166,12],
@@ -27,7 +26,7 @@ export default function LocationPinModal({marketCode,latitude,longitude,location
     async function initialize(){
       const L=await preloadLocationMap();
       if(disposed||!mapElement.current||mapInstance.current) return;
-      const fallback=marketCenter[marketCode]||marketCenter['ph-ncr'];
+      const fallback=marketCenter[marketCode]||marketCenter['gh-greater-accra'];
       const hasPoint=latitude!==null&&latitude!==undefined&&longitude!==null&&longitude!==undefined&&Number.isFinite(Number(latitude))&&Number.isFinite(Number(longitude));
       const center=hasPoint?[Number(latitude),Number(longitude)]:fallback.slice(0,2);
       const map=L.map(mapElement.current,{zoomControl:true}).setView(center,hasPoint?17:fallback[2]);
@@ -72,7 +71,7 @@ export default function LocationPinModal({marketCode,latitude,longitude,location
   useEffect(()=>{
     const searchText=query.trim();
     if(searchText.length<3||!dirty){setSuggestions([]);setSuggestionsLoading(false);return;}
-    const fallback=marketCenter[marketCode]||marketCenter['ph-ncr'];
+    const fallback=marketCenter[marketCode]||marketCenter['gh-greater-accra'];
     const mapCenterPoint=mapInstance.current?.getCenter();
     const biasLatitude=mapCenterPoint?.lat??(Number.isFinite(Number(latitude))?Number(latitude):fallback[0]);
     const biasLongitude=mapCenterPoint?.lng??(Number.isFinite(Number(longitude))?Number(longitude):fallback[1]);
@@ -107,7 +106,7 @@ export default function LocationPinModal({marketCode,latitude,longitude,location
     if(suggestions[0]){chooseSuggestion(suggestions[0]);return;}
     setLoading(true);
     try{
-      const fallback=marketCenter[marketCode]||marketCenter['ph-ncr'];const center=mapInstance.current?.getCenter();
+      const fallback=marketCenter[marketCode]||marketCenter['gh-greater-accra'];const center=mapInstance.current?.getCenter();
       const params=new URLSearchParams({q:query.trim(),market:marketCode,lat:String(center?.lat??fallback[0]),lon:String(center?.lng??fallback[1])});
       const response=await fetch(`/api/address-suggestions?${params}`);const result=await response.json();
       if(!response.ok||!Array.isArray(result)||!result[0]) throw new Error(result.error||'No matching address was found.');
@@ -116,7 +115,6 @@ export default function LocationPinModal({marketCode,latitude,longitude,location
   }
   async function confirm(){setSaving(true);setError('');try{await onConfirm(selection);onClose();}catch(reason){setError(reason.message);setSaving(false);}}
 
-  const isGhana=String(marketCode).startsWith('gh-');
   const accuracyMeters=Number(locationAccuracy);
   const accuracyHint=Number.isFinite(accuracyMeters)&&accuracyMeters>0
     ? accuracyMeters>100
@@ -126,9 +124,9 @@ export default function LocationPinModal({marketCode,latitude,longitude,location
   return <div className="map-modal-backdrop">
     <section className="map-modal" role="dialog" aria-modal="true" aria-labelledby="map-pin-title">
       <header><div><p className="kicker">Exact delivery point</p><h2 id="map-pin-title">Confirm your address</h2></div><button onClick={onClose} aria-label="Close map"><X/></button></header>
-      <p className="map-modal-help">{isGhana?`The address text may name the nearest mapped landmark, but delivery uses the exact pin. Drag it to your entrance if needed.${accuracyHint}`:'Search your complete address, select a suggestion, then fine-tune the pin if needed.'}</p>
+      <p className="map-modal-help">{`The address text may name the nearest mapped landmark, but delivery uses the exact pin. Drag it to your entrance if needed.${accuracyHint}`}</p>
       <form className="map-search-form" onSubmit={searchAddress}>
-        <div className="map-search-box"><Search/><input value={query} onChange={event=>{setQuery(event.target.value);setDirty(true);setSelection(null);}} autoComplete="off" placeholder="House number, street, barangay, city" autoFocus required/>{suggestionsLoading&&<Loader2 className="spin"/>}</div>
+        <div className="map-search-box"><Search/><input value={query} onChange={event=>{setQuery(event.target.value);setDirty(true);setSelection(null);}} autoComplete="off" placeholder="House number, street, area, municipality" autoFocus required/>{suggestionsLoading&&<Loader2 className="spin"/>}</div>
         {suggestions.length>0&&<div className="address-suggestions" role="listbox">{suggestions.map((suggestion,index)=><button type="button" role="option" aria-selected="false" onClick={()=>chooseSuggestion(suggestion)} key={`${suggestion.place_id||suggestion.formatted}-${index}`}><MapPin/><span><strong>{suggestion.house_number||suggestion.formatted}</strong><small>{suggestion.formatted}</small></span></button>)}</div>}
         <button disabled={loading}>{loading?<Loader2 className="spin"/>:<Search/>} Find on map</button>
       </form>
